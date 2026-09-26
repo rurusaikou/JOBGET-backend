@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jobget-backend",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-16",
+  "observability": { "enabled": true },
+  "vars": {
+    "AI_API_URL": "https://api.deepseek.com/responses",
+    "AI_MODEL": "deepseek-v4-flash"
+  },
+  "d1_databases": [
+    {
+      "binding": "jobget_metrics",
+      "database_name": "jobget-metrics",
+      "database_id": "be1d8a8b-bc8f-40ee-866b-7f3a812f1939",
+      "remote": false
+    }
+  ],
+  "triggers": { "crons": ["0 3 * * *"] }
+}

@@ -1,0 +1,9 @@
+# Copy to .dev.vars and replace locally. Never commit the real secret.
+AI_API_KEY=replace-with-your-provider-key
+
+# AI quota (optional; numeric defaults shown)
+# Explicit false enables limits and overrides the code default (currently true).
+AI_QUOTA_DISABLED=false
+AI_INSTALLATION_DAILY_LIMIT=20
+AI_INSTALLATION_MINUTE_LIMIT=6
+AI_GLOBAL_DAILY_LIMIT=200
