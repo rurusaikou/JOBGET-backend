@@ -26,3 +26,22 @@ CREATE TABLE IF NOT EXISTS ai_quota_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_quota_installation_created ON ai_quota_attempts(installation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_quota_created ON ai_quota_attempts(created_at);
+
+-- 当前反馈接口所需表；反馈可能包含 JD 和 AI 输出正文，不属于匿名 metrics。
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  installation_id TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('function_error', 'analysis_inaccurate', 'suggestion', 'other')),
+  content TEXT NOT NULL,
+  job_id TEXT,
+  job_title TEXT,
+  jd_content TEXT,
+  deep_analysis_result TEXT,
+  match_result TEXT,
+  revision_result TEXT,
+  greeting_result TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_installation_created ON feedback(installation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_type_created ON feedback(type, created_at);

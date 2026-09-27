@@ -1,57 +1,94 @@
 # JOBGET Backend v2.7.0
 
-文档入口：[docs/README.md](docs/README.md)。运行配置与单安装实例额度见 [docs/configuration.md](docs/configuration.md)。
+JOBGET 浏览器扩展的 Cloudflare Worker 后端，提供托管 AI、使用事件统计和用户反馈接口。
 
-本地链路：Chrome/Edge 扩展 → `http://localhost:8787` → Cloudflare Worker → 兼容 Responses 的模型服务；匿名统计写本地 D1。当前未部署公网。
+> 项目的详细设计、接口规范和运维文档为内部资料，不随本仓库公开。本文只包含运行、验证和维护此代码所需的信息；仓库内不存在 `docs/` 目录。
 
-## 背景与项目定位
+## 能力与数据边界
 
-本项目为 JOBGET 求职辅助浏览器扩展提供托管 AI 入口与匿名使用统计。扩展负责岗位、简历等业务交互与结果解析；后端统一管理模型配置和密钥、限制调用额度，并通过 Cloudflare D1 保存不含业务正文的指标。
+- **托管 AI**：校验请求，由服务端固定模型和密钥，限制输入与各模块输出预算，预占调用额度，再转发到兼容 Responses API 的模型服务。
+- **使用事件**：接收匿名安装标识、执行标识、模块、事件状态和业务日期；去重后由 D1 触发器维护累计安装量、日活安装量和每日模块汇总。
+- **用户反馈**：保存用户主动提交的反馈；关联岗位时可以同时保存岗位标题、JD 和已生成的工作流结果快照。
+- **基础能力**：路由、CORS、请求体限长、健康检查，以及每天清理 30 天前的 AI 调用、事件和额度明细。
 
-## 项目说明与功能实现
+AI 调用指标和使用事件不保存提示词、简历、JD 或模型输出正文。`feedback` 表不同：它可能包含反馈正文、JD 和 AI 输出，但不接收简历原文或附件，且不会被当前定时任务自动清理。`installation_id` 是安装实例标识，不代表自然人或下载量。
 
-从 [项目说明](docs/project.md) 开始阅读，包含背景、系统分工、目录导航、配置以及各项功能的实现流程。
+代码入口是 `src/index.js`，AI、事件、反馈和额度逻辑分别位于 `src/ai-gateway.js`、`src/events.js`、`src/feedback.js` 和 `src/quota.js`；D1 建表、聚合触发器与报表位于 `sql/`。
 
-- **托管 AI**：参数校验、模块输出预算、原子额度预占、模型转发与用量统计。
-- **匿名事件**：批量校验、重复/冲突事件处理，以及数据库触发器维护日汇总。
-- **基础能力**：跨域与路由、请求体限长、健康响应及 30 天明细清理。
+## 本地启动
 
-调用次数可通过 `AI_QUOTA_DISABLED` 控制：当前代码默认不限次数，模板环境变量为 `false`（启用限额），环境变量优先。详见 [配置说明](docs/configuration.md)。
-
-代码入口为 `src/index.js`，核心流程分别在 `src/ai-gateway.js` 和 `src/events.js`。
-
-## 启动
+需要 Node.js、npm、Cloudflare Wrangler，以及一个兼容 Responses API 的上游模型服务。
 
 ```bash
 npm ci
 test -f .dev.vars || cp .dev.vars.example .dev.vars
 # 编辑 .dev.vars，填写 AI_API_KEY；已有文件请保留，不要覆盖。
-# wrangler.jsonc 的 AI_API_URL / AI_MODEL 必须与密钥对应的服务兼容。
+# 同时确认 wrangler.jsonc 中的 AI_API_URL 和 AI_MODEL 与密钥对应。
 npx wrangler d1 execute jobget-metrics --local --file=sql/schema.sql
 npx wrangler d1 execute jobget-metrics --local --file=sql/event-aggregates.sql
 npm run dev
 ```
 
-访问 `http://localhost:8787/health` 应返回 `status: ok`；这只说明 Worker 可访问，不检查密钥、上游模型或 D1。扩展选择“JOBGET 托管服务”，点击连接测试才会验证模型链路并消耗一次额度。仓库不含真实密钥，不能开箱完成真实 AI 推理。
+访问 `http://localhost:8787/health` 应返回：
 
-旧库升级顺序见 [本地部署与排障](docs/deployment.md)。事件触发器不可漏装，否则统计汇总不会更新。
+```json
+{ "name": "JOBget Backend", "status": "ok" }
+```
 
-## 接口与验证
+健康检查只说明 Worker 可访问，不检查 D1、密钥或上游模型。仓库不包含真实密钥，因此不能开箱完成真实 AI 推理。事件聚合依赖 `sql/event-aggregates.sql` 中的触发器，不可漏装。
 
-- [完整接口说明](docs/api.md)：请求字段、响应、错误码、模块预算、额度、CORS、重试及 curl 示例。
-- [检查记录](docs/verification.md)：本次验证范围及尚需人工验收的事项。
-- `npm test` / `npm run test:worker` 是同一套 Vitest Worker + D1 测试，模型请求使用 mock。
-- `test/contract.spec.js` 会导入相邻的 `../JDGET_v2.7.0` 插件真实客户端；两个仓库需按此目录并列。单独后端可用 `npx vitest run test/index.spec.js`。
+旧数据库仅在符合 `sql/metrics-v2.sql` 文件头所述前提时执行该一次性升级脚本，已升级的数据库不要重复执行；随后仍需安装 `sql/event-aggregates.sql`。
 
-没有公开统计查询 API。维护者执行：
+## 运行配置
+
+非密钥配置位于 `wrangler.jsonc`，本地密钥放在不提交的 `.dev.vars` 中。可用的额度变量如下：
+
+| 变量 | 代码默认值 | `.dev.vars.example` | 含义 |
+| --- | ---: | ---: | --- |
+| `AI_QUOTA_DISABLED` | `true` | `false` | `true` 跳过次数限制；仍记录调用尝试 |
+| `AI_INSTALLATION_DAILY_LIMIT` | `20` | `20` | 单安装实例每日上限（UTC 日） |
+| `AI_INSTALLATION_MINUTE_LIMIT` | `6` | `6` | 单安装实例最近 60 秒上限 |
+| `AI_GLOBAL_DAILY_LIMIT` | `200` | `200` | 所有安装实例共享的每日上限 |
+
+运行时环境变量优先于代码默认值。三个限额跨所有 AI 模块共享；无效、空值或非正整数会回退到代码默认值。额度在调用上游前按“尝试”预占，上游失败不退还。
+
+各模块最大输出 Token：`deep_analysis` 5000、`resume_profile` 4000、`resume_match` 6000、`resume_revision` 8000、`greeting` 3200、`settings_test` 40。客户端可以请求更小值，不能提高上限。AI 请求体上限为 100 KiB，所识别文本合计最多 24,000 个 Unicode 码点，上游超时为 120 秒。
+
+## HTTP 接口
+
+| 路径 | 方法 | 请求体上限 | 说明 |
+| --- | --- | ---: | --- |
+| `/`、`/health` | 任意（通常为 `GET`） | — | Worker 健康状态 |
+| `/api/ai` | `POST` | 100 KiB | 托管 Responses API 调用 |
+| `/api/events` | `POST` | 64 KiB | 1–40 条匿名使用事件 |
+| `/api/feedback` | `POST` | 512 KiB | 用户反馈及可选岗位快照 |
+
+AI 请求外层包含 UUID v4 格式的 `installation_id`、受支持的 `module` 和 `request`。服务端忽略客户端模型值并强制 `stream: false`、`store: false`；不支持的上游参数会返回 `invalid_request`。
+
+事件只允许 `installation_id`、`execution_id`、`module`、`event`、`date` 五个字段。`event` 为 `start`、`success` 或 `failed`，日期允许七天内补报及最多未来一天；整批中任一项无效会拒绝整批。重发和冲突事件会静默忽略。
+
+反馈类型为 `function_error`、`analysis_inaccurate`、`suggestion` 或 `other`。反馈正文必填；只有提供 `job_id` 时才能携带岗位和工作流快照。
+
+CORS 允许无 `Origin` 的服务端请求、扩展来源、本地文件/沙箱来源以及 localhost。CORS 不是身份认证；公网部署前应结合实际威胁模型增加认证或边缘访问控制。当前代码没有公开的统计或反馈查询 API。
+
+## 验证
 
 ```bash
-# 执行 SQL 查询（本地数据库）
-npx wrangler d1 execute jobget-metrics --local --command="SELECT * FROM ai_calls ORDER BY rowid DESC LIMIT 20;"
+# 完整测试；需要相邻目录 ../JDGET_v2.7.0，供契约测试导入真实客户端代码
+npm test
 
-# 查看所有表
+# 仅验证后端，不依赖相邻的扩展仓库
+npx vitest run test/index.spec.js
+```
+
+测试使用模拟模型响应，不会发起真实模型调用。`npm test` 与 `npm run test:worker` 当前执行同一套 Vitest 配置。
+
+## 维护查询
+
+```bash
+npx wrangler d1 execute jobget-metrics --local --command="SELECT * FROM ai_calls ORDER BY id DESC LIMIT 20;"
 npx wrangler d1 execute jobget-metrics --local --command="SELECT name FROM sqlite_master WHERE type='table';"
-
-# 执行 SQL 文件
 npx wrangler d1 execute jobget-metrics --local --file=sql/report.sql
 ```
+
+以上命令默认查询本地 D1。操作远端数据库前请先确认 Wrangler 环境与目标数据库，避免误操作生产数据。

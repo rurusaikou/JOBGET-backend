@@ -1,5 +1,5 @@
 /**
- * 按实际 UTF-8 字节限制请求体，再解析 JSON，供 AI 和事件接口共用。
+ * 按实际 UTF-8 字节限制请求体，再解析 JSON，供所有 JSON 接口共用。
  * 返回 { body } 或 { response }，调用方收到 response 时直接结束请求。
  */
 export async function readJson(request, limit) {
