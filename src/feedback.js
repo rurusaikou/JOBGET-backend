@@ -65,7 +65,7 @@ export async function handleFeedback(request, env) {
 
   const now = new Date().toISOString();
   try {
-    const result = await env.jobget_metrics.prepare(`
+    const result = await env.rolemi_metrics.prepare(`
       INSERT INTO feedback (
         installation_id, type, content, job_id, job_title, jd_content,
         deep_analysis_result, match_result, revision_result, greeting_result, created_at

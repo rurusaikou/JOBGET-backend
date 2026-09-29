@@ -167,7 +167,7 @@ export async function handleAI(request, env) {
 
   // 5. 用量统计是尽力写入；失败不影响已经取得的模型结果。
   try {
-    await env.jobget_metrics.prepare(`
+    await env.rolemi_metrics.prepare(`
       INSERT INTO ai_calls (
         installation_id, module, model, input_chars, input_tokens,
         reasoning_tokens, output_tokens, latency_ms, status, created_at

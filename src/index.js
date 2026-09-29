@@ -40,7 +40,7 @@ export default {
     } else if (url.pathname === "/api/feedback") {
       response = await handleFeedback(request, env);
     } else if (url.pathname === "/health" || url.pathname === "/") {
-      response = Response.json({ name: "JOBget Backend", status: "ok" });
+      response = Response.json({ name: "RoleMI Backend", status: "ok" });
     } else {
       response = Response.json({ error: { code: "not_found" } }, { status: 404 });
     }
@@ -55,11 +55,11 @@ export default {
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
     // 明细按完整时间戳删除；每日安装按业务日期删除并保留截止日，因而最多跨 31 个 UTC 日期标签。
     const cutoffDay = cutoff.slice(0, 10);
-    await env.jobget_metrics.batch([
-      env.jobget_metrics.prepare("DELETE FROM ai_calls WHERE created_at < ?").bind(cutoff),
-      env.jobget_metrics.prepare("DELETE FROM events WHERE created_at < ?").bind(cutoff),
-      env.jobget_metrics.prepare("DELETE FROM ai_quota_attempts WHERE created_at < ?").bind(cutoff),
-      env.jobget_metrics.prepare("DELETE FROM daily_installations WHERE event_date < ?").bind(cutoffDay),
+    await env.rolemi_metrics.batch([
+      env.rolemi_metrics.prepare("DELETE FROM ai_calls WHERE created_at < ?").bind(cutoff),
+      env.rolemi_metrics.prepare("DELETE FROM events WHERE created_at < ?").bind(cutoff),
+      env.rolemi_metrics.prepare("DELETE FROM ai_quota_attempts WHERE created_at < ?").bind(cutoff),
+      env.rolemi_metrics.prepare("DELETE FROM daily_installations WHERE event_date < ?").bind(cutoffDay),
     ]);
   }
 };

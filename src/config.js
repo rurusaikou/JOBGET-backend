@@ -1,4 +1,4 @@
-// JOBGET 后端集中配置。运行时可通过 Worker 环境变量覆盖额度；未配置时使用这里的默认值。
+// RoleMI 后端集中配置。运行时可通过 Worker 环境变量覆盖额度；未配置时使用这里的默认值。
 export const AI_MODULES = new Set([
   "deep_analysis", "resume_profile", "resume_match", "resume_revision", "greeting", "settings_test",
 ]);

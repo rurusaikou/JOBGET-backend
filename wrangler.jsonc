@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "jobget-backend",
+  "name": "rolemi-backend",
   "main": "src/index.js",
   "compatibility_date": "2026-09-16",
   "observability": { "enabled": true },
@@ -10,8 +10,8 @@
   },
   "d1_databases": [
     {
-      "binding": "jobget_metrics",
-      "database_name": "jobget-metrics",
+      "binding": "rolemi_metrics",
+      "database_name": "rolemi-metrics",
       "database_id": "be1d8a8b-bc8f-40ee-866b-7f3a812f1939",
       "remote": false
     }

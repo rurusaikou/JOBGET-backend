@@ -8,17 +8,17 @@ import schema from "../sql/schema.sql?raw";
 
 async function initSchema() {
   for (const statement of schema.split(";").map(s => s.trim()).filter(Boolean)) {
-    await env.jobget_metrics.prepare(statement).run();
+    await env.rolemi_metrics.prepare(statement).run();
   }
 }
 
-beforeAll(async () => { await initSchema(); await env.jobget_metrics.prepare(aggregates).run(); });
+beforeAll(async () => { await initSchema(); await env.rolemi_metrics.prepare(aggregates).run(); });
 
-describe("JOBget worker", () => {
+describe("RoleMI worker", () => {
   it("returns backend health", async () => {
     const response = await SELF.fetch("http://localhost/health");
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ name: "JOBget Backend", status: "ok" });
+    expect(await response.json()).toEqual({ name: "RoleMI Backend", status: "ok" });
   });
 
   it("accepts minimal events, deduplicates retries, and aggregates without business content", async () => {
@@ -28,9 +28,9 @@ describe("JOBget worker", () => {
     const body = { events: [{ installation_id: installation, execution_id: execution, module: "deep_analysis", event: "start", date }] };
     expect((await SELF.fetch("http://localhost/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).status).toBe(200);
     expect((await SELF.fetch("http://localhost/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).status).toBe(200);
-    expect((await env.jobget_metrics.prepare("SELECT COUNT(*) AS n FROM events WHERE execution_id = ?").bind(execution).first()).n).toBe(1);
-    expect((await env.jobget_metrics.prepare("SELECT count FROM daily_metrics WHERE event_date=? AND module=? AND event=?").bind(date, "deep_analysis", "start").first()).count).toBe(1);
-    expect((await env.jobget_metrics.prepare("SELECT COUNT(*) AS n FROM installations WHERE installation_id=?").bind(installation).first()).n).toBe(1);
+    expect((await env.rolemi_metrics.prepare("SELECT COUNT(*) AS n FROM events WHERE execution_id = ?").bind(execution).first()).n).toBe(1);
+    expect((await env.rolemi_metrics.prepare("SELECT count FROM daily_metrics WHERE event_date=? AND module=? AND event=?").bind(date, "deep_analysis", "start").first()).count).toBe(1);
+    expect((await env.rolemi_metrics.prepare("SELECT COUNT(*) AS n FROM installations WHERE installation_id=?").bind(installation).first()).n).toBe(1);
   });
 
   it("rejects event payloads containing extra/business fields", async () => {
@@ -58,7 +58,7 @@ describe("JOBget worker", () => {
       }) });
       expect(response.status).toBe(200);
       expect(await response.text()).toBe(result);
-      const row = await env.jobget_metrics.prepare("SELECT * FROM ai_calls WHERE installation_id=?").bind("55555555-5555-4555-8555-555555555555").first();
+      const row = await env.rolemi_metrics.prepare("SELECT * FROM ai_calls WHERE installation_id=?").bind("55555555-5555-4555-8555-555555555555").first();
       expect(row).toMatchObject({ module: "deep_analysis", model: "deepseek-v4-flash", input_chars: 14, input_tokens: 32, reasoning_tokens: 6, output_tokens: 10, status: "success" });
       expect(JSON.stringify(row)).not.toContain("private");
     } finally { upstream.mockRestore(); }
@@ -70,7 +70,7 @@ describe("JOBget worker", () => {
   });
 });
 
-beforeEach(async () => { await env.jobget_metrics.prepare('DELETE FROM ai_quota_attempts').run(); });
+beforeEach(async () => { await env.rolemi_metrics.prepare('DELETE FROM ai_quota_attempts').run(); });
 
 const post = (path, body) => SELF.fetch(`http://localhost${path}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -113,7 +113,7 @@ it('disables all quotas while recording attempts and supports restoring limits',
   for (const flag of ['true', true]) {
     expect(await reserveQuota({ ...config, AI_QUOTA_DISABLED: flag }, id, 'greeting', now)).toBe(true);
   }
-  expect((await env.jobget_metrics.prepare('SELECT COUNT(*) AS n FROM ai_quota_attempts').first()).n).toBe(3);
+  expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM ai_quota_attempts').first()).n).toBe(3);
   for (const flag of ['false', false, 'invalid']) {
     expect(await reserveQuota({ ...config, AI_QUOTA_DISABLED: flag }, id, 'greeting', now)).toBe(false);
   }
@@ -121,11 +121,11 @@ it('disables all quotas while recording attempts and supports restoring limits',
 it('enforces daily installation and global budgets', async () => {
   const now = new Date('2040-01-02T12:00:00Z');
   const id = crypto.randomUUID();
-  await env.jobget_metrics.batch(Array.from({ length: 20 }, () => env.jobget_metrics.prepare(
+  await env.rolemi_metrics.batch(Array.from({ length: 20 }, () => env.rolemi_metrics.prepare(
     'INSERT INTO ai_quota_attempts (installation_id,module,created_at) VALUES (?, ?, ?)'
   ).bind(id, 'greeting', '2040-01-02T10:00:00.000Z')));
   expect(await reserveQuota(env, id, 'greeting', now)).toBe(false);
-  await env.jobget_metrics.batch(Array.from({ length: 180 }, () => env.jobget_metrics.prepare(
+  await env.rolemi_metrics.batch(Array.from({ length: 180 }, () => env.rolemi_metrics.prepare(
     'INSERT INTO ai_quota_attempts (installation_id,module,created_at) VALUES (?, ?, ?)'
   ).bind(crypto.randomUUID(), 'greeting', '2040-01-02T10:00:00.000Z')));
   expect(await reserveQuota(env, crypto.randomUUID(), 'greeting', now)).toBe(false);
@@ -133,18 +133,18 @@ it('enforces daily installation and global budgets', async () => {
 it('accepts out-of-order events but keeps only the first terminal outcome', async () => {
   const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'favorite', event: 'success', date: new Date().toISOString().slice(0, 10) };
   expect((await post('/api/events', { events: [item, { ...item, event: 'failed' }, { ...item, event: 'start' }, item] })).status).toBe(200);
-  const rows = await env.jobget_metrics.prepare('SELECT event FROM events WHERE execution_id=? ORDER BY event').bind(item.execution_id).all();
+  const rows = await env.rolemi_metrics.prepare('SELECT event FROM events WHERE execution_id=? ORDER BY event').bind(item.execution_id).all();
   expect(rows.results.map(row => row.event)).toEqual(['start', 'success']);
   expect((await post('/api/events', { events: [{ ...item, event: 'failed', date: '2026-02-30' }] })).status).toBe(400);
   expect((await post('/api/events', { events: [{ ...item, installation_id: [item.installation_id] }] })).status).toBe(400);
 });
 it('rolls back event receipts when aggregation fails, then allows retry', async () => {
   const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'excel_export', event: 'start', date: new Date().toISOString().slice(0, 10) };
-  await env.jobget_metrics.prepare(`CREATE TRIGGER test_aggregate_failure BEFORE INSERT ON daily_metrics WHEN NEW.module='excel_export' BEGIN SELECT RAISE(ABORT, 'test'); END;`).run();
+  await env.rolemi_metrics.prepare(`CREATE TRIGGER test_aggregate_failure BEFORE INSERT ON daily_metrics WHEN NEW.module='excel_export' BEGIN SELECT RAISE(ABORT, 'test'); END;`).run();
   try {
     expect((await post('/api/events', { events: [item] })).status).toBe(503);
-    expect((await env.jobget_metrics.prepare('SELECT COUNT(*) AS n FROM events WHERE execution_id=?').bind(item.execution_id).first()).n).toBe(0);
-  } finally { await env.jobget_metrics.prepare('DROP TRIGGER test_aggregate_failure').run(); }
+    expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM events WHERE execution_id=?').bind(item.execution_id).first()).n).toBe(0);
+  } finally { await env.rolemi_metrics.prepare('DROP TRIGGER test_aggregate_failure').run(); }
   expect((await post('/api/events', { events: [item] })).status).toBe(200);
 });
 it('bounds output and preserves reasoning compatibility errors and incomplete responses', async () => {
@@ -165,7 +165,7 @@ it('bounds output and preserves reasoning compatibility errors and incomplete re
 it('returns configuration, quota storage and network errors without sensitive text', async () => {
   const request = () => new Request('http://localhost/api/ai', { method: 'POST', body: JSON.stringify(aiBody()) });
   expect((await worker.fetch(request(), { ...env, AI_API_KEY: '' })).status).toBe(503);
-  expect((await worker.fetch(request(), { ...env, jobget_metrics: {} })).status).toBe(503);
+  expect((await worker.fetch(request(), { ...env, rolemi_metrics: {} })).status).toBe(503);
   const upstream = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('private upstream data'));
   const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
@@ -184,13 +184,13 @@ it('supports extension preflight and rejects unknown routes and methods', async 
 });
 it('scheduled retention removes old details and preserves cumulative aggregates', async () => {
   const id = crypto.randomUUID();
-  await env.jobget_metrics.prepare('INSERT INTO events (installation_id,execution_id,module,event,event_date,created_at) VALUES (?,?,?,?,?,?)')
+  await env.rolemi_metrics.prepare('INSERT INTO events (installation_id,execution_id,module,event,event_date,created_at) VALUES (?,?,?,?,?,?)')
     .bind(id, crypto.randomUUID(), 'favorite', 'start', '2000-01-01', '2000-01-01T00:00:00.000Z').run();
   await worker.scheduled({}, env);
-  expect((await env.jobget_metrics.prepare('SELECT COUNT(*) AS n FROM events WHERE installation_id=?').bind(id).first()).n).toBe(0);
-  expect((await env.jobget_metrics.prepare('SELECT COUNT(*) AS n FROM daily_installations WHERE installation_id=?').bind(id).first()).n).toBe(0);
-  expect((await env.jobget_metrics.prepare('SELECT COUNT(*) AS n FROM installations WHERE installation_id=?').bind(id).first()).n).toBe(1);
-  expect((await env.jobget_metrics.prepare("SELECT count FROM daily_metrics WHERE event_date='2000-01-01' AND module='favorite'").first()).count).toBe(1);
+  expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM events WHERE installation_id=?').bind(id).first()).n).toBe(0);
+  expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM daily_installations WHERE installation_id=?').bind(id).first()).n).toBe(0);
+  expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM installations WHERE installation_id=?').bind(id).first()).n).toBe(1);
+  expect((await env.rolemi_metrics.prepare("SELECT count FROM daily_metrics WHERE event_date='2000-01-01' AND module='favorite'").first()).count).toBe(1);
 });
 
 it("stores feedback with the selected job workflow snapshot", async () => {
@@ -211,7 +211,7 @@ it("stores feedback with the selected job workflow snapshot", async () => {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
   });
   expect(response.status).toBe(200);
-  const row = await env.jobget_metrics.prepare("SELECT * FROM feedback WHERE installation_id=?").bind(installation).first();
+  const row = await env.rolemi_metrics.prepare("SELECT * FROM feedback WHERE installation_id=?").bind(installation).first();
   expect(row).toMatchObject({ type: payload.type, content: payload.content, job_id: "job-123", job_title: "AI 产品经理", jd_content: payload.jd_content });
   expect(JSON.parse(row.deep_analysis_result)).toEqual(payload.deep_analysis_result);
   expect(JSON.parse(row.match_result)).toEqual(payload.match_result);

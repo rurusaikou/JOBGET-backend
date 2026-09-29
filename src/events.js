@@ -51,7 +51,7 @@ export async function handleEvents(request, env) {
   // 不要求 start 先到，允许离线队列乱序发送。
   // D1 batch 与插入触发器一起提交明细和汇总；任一步失败时整批回滚。
   try {
-    const results = await env.jobget_metrics.batch(body.events.map(item => env.jobget_metrics.prepare(`
+    const results = await env.rolemi_metrics.batch(body.events.map(item => env.rolemi_metrics.prepare(`
       INSERT OR IGNORE INTO events
         (installation_id, execution_id, module, event, event_date, created_at)
       SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (

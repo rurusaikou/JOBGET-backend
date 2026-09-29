@@ -1,6 +1,6 @@
-# JOBGET Backend v2.7.0
+# RoleMI Backend v2.7.0
 
-JOBGET 浏览器扩展的 Cloudflare Worker 后端，提供托管 AI、使用事件统计和用户反馈接口。
+RoleMI 浏览器扩展的 Cloudflare Worker 后端，提供托管 AI、使用事件统计和用户反馈接口。
 
 > 项目的详细设计、接口规范和运维文档为内部资料，不随本仓库公开。本文只包含运行、验证和维护此代码所需的信息；仓库内不存在 `docs/` 目录。
 
@@ -24,15 +24,15 @@ npm ci
 test -f .dev.vars || cp .dev.vars.example .dev.vars
 # 编辑 .dev.vars，填写 AI_API_KEY；已有文件请保留，不要覆盖。
 # 同时确认 wrangler.jsonc 中的 AI_API_URL 和 AI_MODEL 与密钥对应。
-npx wrangler d1 execute jobget-metrics --local --file=sql/schema.sql
-npx wrangler d1 execute jobget-metrics --local --file=sql/event-aggregates.sql
+npx wrangler d1 execute rolemi-metrics --local --file=sql/schema.sql
+npx wrangler d1 execute rolemi-metrics --local --file=sql/event-aggregates.sql
 npm run dev
 ```
 
 访问 `http://localhost:8787/health` 应返回：
 
 ```json
-{ "name": "JOBget Backend", "status": "ok" }
+{ "name": "RoleMI Backend", "status": "ok" }
 ```
 
 健康检查只说明 Worker 可访问，不检查 D1、密钥或上游模型。仓库不包含真实密钥，因此不能开箱完成真实 AI 推理。事件聚合依赖 `sql/event-aggregates.sql` 中的触发器，不可漏装。
@@ -74,7 +74,7 @@ CORS 允许无 `Origin` 的服务端请求、扩展来源、本地文件/沙箱�
 ## 验证
 
 ```bash
-# 完整测试；需要相邻目录 ../JDGET_v2.7.0，供契约测试导入真实客户端代码
+# 完整测试；需要相邻目录 ../RoleMI_v2.7.0，供契约测试导入真实客户端代码
 npm test
 
 # 仅验证后端，不依赖相邻的扩展仓库
@@ -86,9 +86,9 @@ npx vitest run test/index.spec.js
 ## 维护查询
 
 ```bash
-npx wrangler d1 execute jobget-metrics --local --command="SELECT * FROM ai_calls ORDER BY id DESC LIMIT 20;"
-npx wrangler d1 execute jobget-metrics --local --command="SELECT name FROM sqlite_master WHERE type='table';"
-npx wrangler d1 execute jobget-metrics --local --file=sql/report.sql
+npx wrangler d1 execute rolemi-metrics --local --command="SELECT * FROM ai_calls ORDER BY id DESC LIMIT 20;"
+npx wrangler d1 execute rolemi-metrics --local --command="SELECT name FROM sqlite_master WHERE type='table';"
+npx wrangler d1 execute rolemi-metrics --local --file=sql/report.sql
 ```
 
 以上命令默认查询本地 D1。操作远端数据库前请先确认 Wrangler 环境与目标数据库，避免误操作生产数据。

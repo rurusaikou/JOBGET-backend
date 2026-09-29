@@ -1,15 +1,15 @@
-// Companion checkout required: ../JDGET_v2.7.0. No real model calls.
+// Companion checkout required: ../RoleMI_v2.7.0. No real model calls.
 import { env } from 'cloudflare:test';
 import { beforeAll, it, expect, vi } from 'vitest';
 import worker from '../src/index.js';
 import schema from '../sql/schema.sql?raw';
 import aggregates from '../sql/event-aggregates.sql?raw';
-import { postResponses } from '../../JDGET_v2.7.0/src/shared/ai/client.js';
-import { AI_MODULES, USAGE_MODULES } from '../../JDGET_v2.7.0/src/shared/backend/config.js';
+import { postResponses } from '../../RoleMI_v2.7.0/src/shared/ai/client.js';
+import { AI_MODULES, USAGE_MODULES } from '../../RoleMI_v2.7.0/src/shared/backend/config.js';
 
 beforeAll(async () => {
-  for (const sql of schema.split(';').map(s => s.trim()).filter(Boolean)) await env.jobget_metrics.prepare(sql).run();
-  await env.jobget_metrics.prepare(aggregates).run();
+  for (const sql of schema.split(';').map(s => s.trim()).filter(Boolean)) await env.rolemi_metrics.prepare(sql).run();
+  await env.rolemi_metrics.prepare(aggregates).run();
 });
 it('routes all real extension AI envelopes through Worker and D1', async () => {
   const id = crypto.randomUUID();
