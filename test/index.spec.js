@@ -25,10 +25,11 @@ describe("RoleMI worker", () => {
     const installation = "11111111-1111-4111-8111-111111111111";
     const execution = "22222222-2222-4222-8222-222222222222";
     const date = new Date().toISOString().slice(0, 10);
-    const body = { events: [{ installation_id: installation, execution_id: execution, module: "deep_analysis", event: "start", date }] };
+    const body = { events: [{ installation_id: installation, execution_id: execution, module: "deep_analysis", mode: "custom", event: "start", date }] };
     expect((await SELF.fetch("http://localhost/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).status).toBe(200);
     expect((await SELF.fetch("http://localhost/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).status).toBe(200);
     expect((await env.rolemi_metrics.prepare("SELECT COUNT(*) AS n FROM events WHERE execution_id = ?").bind(execution).first()).n).toBe(1);
+    expect((await env.rolemi_metrics.prepare("SELECT mode FROM events WHERE execution_id = ?").bind(execution).first()).mode).toBe("custom");
     expect((await env.rolemi_metrics.prepare("SELECT count FROM daily_metrics WHERE event_date=? AND module=? AND event=?").bind(date, "deep_analysis", "start").first()).count).toBe(1);
     expect((await env.rolemi_metrics.prepare("SELECT COUNT(*) AS n FROM installations WHERE installation_id=?").bind(installation).first()).n).toBe(1);
   });
@@ -37,7 +38,7 @@ describe("RoleMI worker", () => {
     const date = new Date().toISOString().slice(0, 10);
     const response = await SELF.fetch("http://localhost/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events: [{
       installation_id: "33333333-3333-4333-8333-333333333333", execution_id: "44444444-4444-4444-8444-444444444444",
-      module: "greeting", event: "success", date, resume: "private resume"
+      module: "greeting", mode: "custom", event: "success", date, resume: "private resume"
     }] }) });
     expect(response.status).toBe(400);
   });
@@ -131,15 +132,17 @@ it('enforces daily installation and global budgets', async () => {
   expect(await reserveQuota(env, crypto.randomUUID(), 'greeting', now)).toBe(false);
 });
 it('accepts out-of-order events but keeps only the first terminal outcome', async () => {
-  const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'favorite', event: 'success', date: new Date().toISOString().slice(0, 10) };
+  const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'favorite', mode: 'custom', event: 'success', date: new Date().toISOString().slice(0, 10) };
   expect((await post('/api/events', { events: [item, { ...item, event: 'failed' }, { ...item, event: 'start' }, item] })).status).toBe(200);
   const rows = await env.rolemi_metrics.prepare('SELECT event FROM events WHERE execution_id=? ORDER BY event').bind(item.execution_id).all();
   expect(rows.results.map(row => row.event)).toEqual(['start', 'success']);
   expect((await post('/api/events', { events: [{ ...item, event: 'failed', date: '2026-02-30' }] })).status).toBe(400);
   expect((await post('/api/events', { events: [{ ...item, installation_id: [item.installation_id] }] })).status).toBe(400);
+  expect((await post('/api/events', { events: [{ ...item, mode: 'unknown' }] })).status).toBe(400);
+  expect((await post('/api/events', { events: [{ ...item, mode: 'other' }] })).status).toBe(400);
 });
 it('rolls back event receipts when aggregation fails, then allows retry', async () => {
-  const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'excel_export', event: 'start', date: new Date().toISOString().slice(0, 10) };
+  const item = { installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module: 'excel_export', mode: 'hosted', event: 'start', date: new Date().toISOString().slice(0, 10) };
   await env.rolemi_metrics.prepare(`CREATE TRIGGER test_aggregate_failure BEFORE INSERT ON daily_metrics WHEN NEW.module='excel_export' BEGIN SELECT RAISE(ABORT, 'test'); END;`).run();
   try {
     expect((await post('/api/events', { events: [item] })).status).toBe(503);
@@ -184,8 +187,8 @@ it('supports extension preflight and rejects unknown routes and methods', async 
 });
 it('scheduled retention removes old details and preserves cumulative aggregates', async () => {
   const id = crypto.randomUUID();
-  await env.rolemi_metrics.prepare('INSERT INTO events (installation_id,execution_id,module,event,event_date,created_at) VALUES (?,?,?,?,?,?)')
-    .bind(id, crypto.randomUUID(), 'favorite', 'start', '2000-01-01', '2000-01-01T00:00:00.000Z').run();
+  await env.rolemi_metrics.prepare('INSERT INTO events (installation_id,execution_id,module,mode,event,event_date,created_at) VALUES (?,?,?,?,?,?,?)')
+    .bind(id, crypto.randomUUID(), 'favorite', 'hosted', 'start', '2000-01-01', '2000-01-01T00:00:00.000Z').run();
   await worker.scheduled({}, env);
   expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM events WHERE installation_id=?').bind(id).first()).n).toBe(0);
   expect((await env.rolemi_metrics.prepare('SELECT COUNT(*) AS n FROM daily_installations WHERE installation_id=?').bind(id).first()).n).toBe(0);

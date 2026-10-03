@@ -30,7 +30,7 @@ it('routes all real extension AI envelopes through Worker and D1', async () => {
   });
   try {
     for (const label of Object.keys(AI_MODULES)) {
-      expect(await postResponses({ label, settings: { provider: 'hosted' }, body: {
+      expect(await postResponses({ label, settings: { mode: 'hosted' }, body: {
         messages: [{ role: 'system', content: 'Return JSON' }, { role: 'user', content: 'sample' }], max_tokens: 40, reasoning_effort: 'none'
       }, errorPrefix: 'test' })).toMatchObject({ status: 'completed' });
     }
@@ -38,7 +38,7 @@ it('routes all real extension AI envelopes through Worker and D1', async () => {
   } finally { upstream.mockRestore(); globalThis.chrome = previousChrome; }
 });
 it('accepts every extension usage module using the documented event contract', async () => {
-  const events = USAGE_MODULES.map(module => ({ installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module, event: 'success', date: new Date().toISOString().slice(0, 10) }));
+  const events = USAGE_MODULES.map(module => ({ installation_id: crypto.randomUUID(), execution_id: crypto.randomUUID(), module, mode: 'custom', event: 'success', date: new Date().toISOString().slice(0, 10) }));
   const result = await worker.fetch(new Request('http://localhost/api/events', { method: 'POST', body: JSON.stringify({ events }) }), env);
   expect(result.status).toBe(200);
   expect(await result.json()).toEqual({ success: true });

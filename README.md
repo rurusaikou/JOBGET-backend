@@ -37,7 +37,7 @@ npm run dev
 
 健康检查只说明 Worker 可访问，不检查 D1、密钥或上游模型。仓库不包含真实密钥，因此不能开箱完成真实 AI 推理。事件聚合依赖 `sql/event-aggregates.sql` 中的触发器，不可漏装。
 
-旧数据库仅在符合 `sql/metrics-v2.sql` 文件头所述前提时执行该一次性升级脚本，已升级的数据库不要重复执行；随后仍需安装 `sql/event-aggregates.sql`。
+已有数据库升级到本版本时执行一次 `sql/event-mode.sql`，将历史事件标记为 `unknown`；不要对全新库或已升级数据库重复执行。更早的旧两表数据库需先执行 `sql/metrics-v2.sql`，最后确认已安装 `sql/event-aggregates.sql`。
 
 ## 运行配置
 
@@ -65,7 +65,7 @@ npm run dev
 
 AI 请求外层包含 UUID v4 格式的 `installation_id`、受支持的 `module` 和 `request`。服务端忽略客户端模型值并强制 `stream: false`、`store: false`；不支持的上游参数会返回 `invalid_request`。
 
-事件只允许 `installation_id`、`execution_id`、`module`、`event`、`date` 五个字段。`event` 为 `start`、`success` 或 `failed`，日期允许七天内补报及最多未来一天；整批中任一项无效会拒绝整批。重发和冲突事件会静默忽略。
+事件只允许 `installation_id`、`execution_id`、`module`、`mode`、`event`、`date` 六个字段。新事件的 `mode` 为 `hosted` 或 `custom`；历史迁移数据在库内标记为 `unknown`。`event` 为 `start`、`success` 或 `failed`，日期允许七天内补报及最多未来一天；整批中任一项无效会拒绝整批。重发和冲突事件会静默忽略。
 
 反馈类型为 `function_error`、`analysis_inaccurate`、`suggestion` 或 `other`。反馈正文必填；只有提供 `job_id` 时才能携带岗位和工作流快照。
 

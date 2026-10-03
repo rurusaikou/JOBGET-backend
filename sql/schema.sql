@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS events (
   installation_id TEXT NOT NULL,
   execution_id TEXT NOT NULL,
   module TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('hosted', 'custom', 'unknown')),
   event TEXT NOT NULL CHECK (event IN ('start', 'success', 'failed')),
   event_date TEXT NOT NULL,
   created_at TEXT NOT NULL,

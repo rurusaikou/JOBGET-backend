@@ -5,6 +5,7 @@ import { readJson } from "./request.js";
 import { EVENT_MODULES } from "./config.js";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENT_TYPES = new Set(["start", "success", "failed"]);
+const EVENT_MODES = new Set(["hosted", "custom"]);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH = 40;
 
@@ -21,13 +22,13 @@ function validDate(date) {
   return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === date && age >= -86400000 && age <= 7 * 86400000;
 }
 
-// 精确限制五个字段，避免业务正文随匿名事件进入数据库。
+// 精确限制六个字段，避免业务正文随匿名事件进入数据库。
 function validEvent(item) {
   return item && typeof item === "object" && !Array.isArray(item) &&
-    Object.keys(item).sort().join() === "date,event,execution_id,installation_id,module" &&
+    Object.keys(item).sort().join() === "date,event,execution_id,installation_id,mode,module" &&
     typeof item.installation_id === "string" && typeof item.execution_id === "string" && typeof item.date === "string" &&
     UUID.test(item.installation_id) && UUID.test(item.execution_id) &&
-    EVENT_MODULES.has(item.module) && EVENT_TYPES.has(item.event) && validDate(item.date);
+    EVENT_MODULES.has(item.module) && EVENT_TYPES.has(item.event) && EVENT_MODES.has(item.mode) && validDate(item.date);
 }
 
 /**
@@ -53,14 +54,14 @@ export async function handleEvents(request, env) {
   try {
     const results = await env.rolemi_metrics.batch(body.events.map(item => env.rolemi_metrics.prepare(`
       INSERT OR IGNORE INTO events
-        (installation_id, execution_id, module, event, event_date, created_at)
-      SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
+        (installation_id, execution_id, module, mode, event, event_date, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
         SELECT 1 FROM events WHERE execution_id = ? AND
-          (installation_id != ? OR module != ? OR event_date != ? OR
+          (installation_id != ? OR module != ? OR mode != ? OR event_date != ? OR
             (? IN ('success', 'failed') AND event IN ('success', 'failed')))
       )
-    `).bind(item.installation_id, item.execution_id, item.module, item.event, item.date, now,
-      item.execution_id, item.installation_id, item.module, item.date, item.event)));
+    `).bind(item.installation_id, item.execution_id, item.module, item.mode, item.event, item.date, now,
+      item.execution_id, item.installation_id, item.module, item.mode, item.date, item.event)));
 
     // 只打印真正写入的新事件；客户端离线队列重发被去重后不会再次污染业务日志。
     body.events.forEach((item, index) => {
